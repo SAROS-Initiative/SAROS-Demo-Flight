@@ -1,6 +1,7 @@
 //////////////////
-//SAROS_Util V1.0
-//Supported Main: V1.0
+//SAROS_Util
+//Version: 1.0
+//Supported Main: 1.X
 //Author: Tristan McGinnis
-//Use: Contains functions and values used for SAROS payloads
+//Use: Contains supplementary functions and values used for SAROS payloads
 ///////////////////

@@ -1,5 +1,5 @@
 ///////////////////
-//SAROS_TestBoard_Main
+//SAROS_TestFlight_Main
 //Version: 1.0
 //Author: Tristan McGinnis & Sam Quartuccio
 //Use: Main source code for SAROS test board
