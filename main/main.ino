@@ -1,7 +1,7 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 1.2
-//Date: 7/7/2023
+//Version: 1.3
+//Date: 7/8/2023
 //Author: Tristan McGinnis & Sam Quartuccio
 //Use: Main source code for SAROS test board
 ///////////////////
@@ -190,10 +190,13 @@ void loop() {
     Serial1.println(packet);
   }else
   {
-    packetCt++;
-    packet = String(ID)+","+String(mis_time)+","+String(packetCt)+","+String(pd1)+","+String(pd2);
-    //Serial.println(packet);
-    Serial1.println(packet);
+    if(millis()/1000.0 <= 14400.0)//Only run for 4 hours
+    {
+      packetCt++;
+      packet = String(ID)+","+String(mis_time)+","+String(packetCt)+","+String(pd1)+","+String(pd2);
+      //Serial.println(packet);
+      Serial1.println(packet);
+    }
   }
 
   
