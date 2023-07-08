@@ -1,198 +1,201 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 1.0
+//Version: 1.1
+//Date: 7/7/2023
 //Author: Tristan McGinnis & Sam Quartuccio
 //Use: Main source code for SAROS test board
 ///////////////////
 
 // Imports:
-#include <Wire.h> 
-#include <SparkFun_u-blox_GNSS_Arduino_Library.h>
-#include <Adafruit_Sensor.h> 
-#include <Adafruit_BNO055.h> 
-#include <utility/imumaths.h> 
-#include "Adafruit_BMP3XX.h" 
-#include "Adafruit_SHT4x.h" 
-#include <TinyGPSPlus.h>
-#include <SoftwareSerial.h>
+#include "SAROS_Util.h"
+
+//Board Details
+String ID = "ST1";
+
+//Packet Values
+String packet;
+int utc_hr, utc_min, utc_sec;
+int mis_hr, mis_min;
+double mis_time;
+long int packetCt = 0;
+int gp_sats;
+double rel_altitude, t_temp, b_pres, b_temp, humidity;
+double pd1, pd2;
+long gp_lat, gp_lon, gp_alt;
 
 
-// Set up for BNO, BMP, SHT, GPS
+//BNO Setup
 uint16_t BNO055_SAMPLERATE_DELAY_MS = 100;
 Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28, &Wire); // passed Wire into BNO055
-#define SEALEVELPRESSURE_HPA (1013.25)
-Adafruit_BMP3XX bmp;
-Adafruit_SHT4x sht4 = Adafruit_SHT4x();
-TinyGPSPlus gps;
-static const uint32_t GPSBaud = 4800;
-SoftwareSerial ss(4, 5);
+double sea_level = 1013.25;
+//
+
+
+Adafruit_BMP3XX bmp; //BMP Setup
+Adafruit_SHT4x sht4 = Adafruit_SHT4x(); //Humidity Sensor Setup
+
+
+//GPS Setup
+SFE_UBLOX_GNSS gps; 
+//static const uint32_t GPSBaud = 38400;
+
+boolean setDynamicModel(dynModel newDynamicModel = DYN_MODEL_AIRBORNE4g, uint16_t maxWait = 1100);
+uint8_t getDynamicModel(uint16_t maxWait = 1100); // Get the dynamic model - returns 255 if the sendCommand fails
+//
+
+//General Variables
+unsigned int lastBlink = 0; //Last time LED Blinked
+unsigned int lastPoll = 0; //Last time polling major sensors
+unsigned int lastShort = 0; //last time polling PDs only
 
 
 void setup() {
-  // Set Serial
-  Serial.begin(115200);
+  Serial.begin(115200);//USB Interface
+  pinMode(25, OUTPUT);//onboard pico LED
   
-  // Set I2C0 for Wire (using GPIO pin #s)
-  Wire.setSDA(0);
-  Wire.setSCL(1);
+  setWire0(1, 0); //set I2C0 for Wire -- SCL 1 SDA 0
   Wire.begin();
-  // Set I2C1 for Wire1
-  Wire1.setSDA(2);
-  Wire1.setSCL(3);
+  setWire1(3, 2);//set I2C1 for Wire1 -- SCL 3 SDA 2
   Wire1.begin();
-  // Set UART for Serial2
+  
+  Serial1.setRX(13);
+  Serial1.setTX(12);
+  Serial1.begin(250000);//Adafruit OpenLog Interface (TEMP)
+
+  
   Serial2.setRX(5);
   Serial2.setTX(4);
-  Serial2.begin(GPSBaud);
+  //set Pins for YIC, UART line begins during test
+  //Serial2.begin(GPSBaud);//YIC interface
 
-  // Serial2.begin(115200);
-  // Set UART for Serial2
+  pinMode(28, INPUT);//set INPUT pin mode for thermistor
+  analogReadResolution(12);//up analog read resolution to 12 bit
 
-  // Set SPI for Reader
-  // pinMode(ss, OUTPUT);
   
   // Start Up Sequence
-  delay(5000);
-  Serial.println("Start Up Sequence Check"); 
+  digitalWrite(25, HIGH);
+  delay(2000);
+  digitalWrite(25, LOW);
+  delay(500);
+
   Serial.println("-----------------------"); 
+  Serial.println("Start Up Sequence"); 
+  Serial.println("-----------------------"); 
+  Serial1.println("-----------------------"); 
+  Serial1.println("Start Up Sequence"); 
+  Serial1.println("-----------------------"); 
 
-  /* BNO055 Check */
+
+  //  BNO055 Check
   if (!bno.begin()){
-    //while(1)
-    {
-    Serial.print("BNO055 not detected");
-  }}
-  Serial.println("Found BNO055 sensor");
+    Serial.println("BNO055\t[ ]");
+  }else
+    Serial.println("BNO055\t[X]");
 
-  /* BMP388 Check */
+  //  BMP388 Check
   if (!bmp.begin_I2C(0x77, &Wire1)){
-    while(1){
-    Serial.print("BMP388 not detected");
-  }}
-  Serial.println("Found BMP388 sensor");
-
-  /* SHT4 Check */
-  if (!sht4.begin(&Wire1)){
-    while(1){
-    Serial.print("SHT4 not detected");
-  }}
-  Serial.println("Found SHT4x sensor");
-
-  /* GPS Check */
-  unsigned long YICTimeTest;
-  if (Serial2.available() > 0)
-  {
-    Serial.println("Serial2 Available, encoding GPS");
-    YICTimeTest = millis();
-    do
-    {
-      gps.encode(Serial2.read());
-      //Serial.print(".");
-    }while (millis() - YICTimeTest < 5000);
-    Serial.println("Encode Test Complete");
+    Serial.println("BMP388\t[ ]");
   }else
   {
-    Serial.println("Serial2 NOT Available");
+    Serial.println("BMP388\t[X]");
+    bmp.setTemperatureOversampling(BMP3_OVERSAMPLING_8X);
+    bmp.setPressureOversampling(BMP3_OVERSAMPLING_4X);
+    bmp.setIIRFilterCoeff(BMP3_IIR_FILTER_COEFF_3);
+    bmp.setOutputDataRate(BMP3_ODR_50_HZ);
+  }
+  
+
+  //  SHT4 Check 
+  if (!sht4.begin(&Wire1)){
+    Serial.println("SHT4X\t[ ]");
+  }else
+    Serial.println("SHT4X\t[X]");
+    sht4.setPrecision(SHT4X_HIGH_PRECISION);
+
+  //  YIC Check
+  Serial2.begin(9600);
+  if (gps.begin(Serial2))
+  {
+    Serial.println("YIC on 9600, switching to 38400");//38400 example suggestion
+    gps.setSerialRate(38400);
+  }
+  delay(2000);
+  Serial2.begin(38400);
+  if (gps.begin(Serial2))
+  {
+    Serial.println("YIC on 38400");
+    gps.setUART1Output(COM_TYPE_UBX); //Set the UART port to output UBX only
+    gps.setI2COutput(COM_TYPE_UBX); //Set the I2C port to output UBX only (turn off NMEA noise)
+    gps.saveConfiguration(); //Save the current settings to flash and BBR
   }
 
-  if (millis() > 5000 && gps.charsProcessed() < 10)
+  //Cycle BMP
+  for(int i = 0; i < 10; i++)
   {
-    Serial.println("No GPS detected: check wiring.");
-    while(true);
+    bmp.performReading();
   }
-  Serial.println("Found YIC sensor [Final Check Completed]");
+
+  //Get Starting Pressure
+  bmp.performReading();
+  sea_level = bmp.readPressure() / 100.0;
+  double temp_alt = bmp.readAltitude(sea_level);
+  Serial.println("Start Pressure/Alt: "+ String(sea_level) +","+String(bmp.readAltitude(sea_level)));
+  Serial1.println("Start Pressure/Alt: "+ String(sea_level)+","+String(bmp.readAltitude(sea_level)));
+  
+  Serial.println("-----------------------"); 
+  Serial.println("Start Up Sequence Complete"); 
+  Serial.println("-----------------------"); 
+  Serial1.println("-----------------------"); 
+  Serial1.println("Start Up Sequence Complete"); 
+  Serial1.println("-----------------------"); 
 }
 
 void loop() {
-  //displayInfo();
-  //printInt(gps.satellites.value(), gps.satellites.isValid(), 5);
   
-  int testSats = gps.satellites.value();
-  float testLong = gps.location.lng();
-  float testLat = gps.location.lat();
-  gps.encode(Serial2.read());
-  Serial.print(testSats);
-  Serial.print("\t");
-  Serial.print(testLat);
-  Serial.print("\t");
-  Serial.println(testLong);
-  Serial.println(Serial2.read());
-  delay(5000);
+  if(threadFunc(250, millis() , &lastPoll))
+  {
+    packetCt++;
+    bmp.performReading();
+
+    sensors_event_t humidity, temp;
+    sht4.getEvent(&humidity, &temp);
+    if(Serial2.available())
+    {
+      gp_lat = gps.getLatitude();
+      gp_lon = gps.getLongitude();
+      gp_sats = gps.getSIV();
+      utc_hr = gps.getHour();
+      utc_min = gps.getMinute();
+      utc_sec = gps.getSecond();
+    }
+    
+    t_temp = (1.0/(log((200000.0/((4095.0/analogRead(28)) - 1))/200000)/3892.0 + 1.0/(25 + 273.15))) - 273.15;
+
+    pd1 = analogRead(26);
+    pd2 = analogRead(27);
+    
+    //mis_time = millis()/1000.00;
+    mis_time = millis()/1000.0;
+    
+    packet = ID + "," + String(mis_time) +","+ String(utc_hr) + ":" + String(utc_min) + ":" + String(utc_sec) + ",";
+    packet += String(packetCt)+","+String(bmp.readAltitude(sea_level))+","+String(t_temp)+",";
+    packet += String(gp_lat)+","+String(gp_lon)+","+String(gp_sats)+","+String(gp_alt)+","+String(bmp.pressure/100.0)+",";
+    packet += String(bmp.temperature)+","+String(humidity.relative_humidity)+","+String(pd1)+","+String(pd2)+",";
+    packet += readBno(bno, 1) +","+readBno(bno, 2)+","+readBno(bno, 3)+","+readBno(bno, 4);
+    Serial.println(packet);
+    Serial1.println(packet);
+  }else
+  {
+    delay(50);
+    packetCt++;
+    packet = String(ID)+","+String(mis_time)+","+String(packetCt)+","+String(pd1)+","+String(pd2);
+    Serial.println(packet);
+    Serial1.println(packet);
+  }
+
   
-  // put your main code here, to run repeatedly:
-}
 
-void displayInfo()
-{
-  Serial.print(F("Location: ")); 
-  if (gps.location.isValid())
-  {
-    Serial.print(gps.location.lat(), 6);
-    Serial.print(F(","));
-    Serial.print(gps.location.lng(), 6);
-  }
-  else
-  {
-    Serial.print(F("INVALID"));
-  }
 
-  Serial.print(F("  Date/Time: "));
-  if (gps.date.isValid())
-  {
-    Serial.print(gps.date.month());
-    Serial.print(F("/"));
-    Serial.print(gps.date.day());
-    Serial.print(F("/"));
-    Serial.print(gps.date.year());
-  }
-  else
-  {
-    Serial.print(F("INVALID"));
-  }
 
-  Serial.print(F(" "));
-  if (gps.time.isValid())
-  {
-    if (gps.time.hour() < 10) Serial.print(F("0"));
-    Serial.print(gps.time.hour());
-    Serial.print(F(":"));
-    if (gps.time.minute() < 10) Serial.print(F("0"));
-    Serial.print(gps.time.minute());
-    Serial.print(F(":"));
-    if (gps.time.second() < 10) Serial.print(F("0"));
-    Serial.print(gps.time.second());
-    Serial.print(F("."));
-    if (gps.time.centisecond() < 10) Serial.print(F("0"));
-    Serial.print(gps.time.centisecond());
-  }
-  else
-  {
-    Serial.print(F("INVALID"));
-  }
 
-  Serial.println();
-}
-
-static void printInt(unsigned long val, bool valid, int len)
-{
-  char sz[32] = "*****************";
-  if (valid)
-    sprintf(sz, "%ld", val);
-  sz[len] = 0;
-  for (int i=strlen(sz); i<len; ++i)
-    sz[i] = ' ';
-  if (len > 0) 
-    sz[len-1] = ' ';
-  Serial.print(sz);
-  smartDelay(0);
-}
-
-static void smartDelay(unsigned long ms)
-{
-  unsigned long start = millis();
-  do 
-  {
-    while (Serial2.available())
-      gps.encode(Serial2.read());
-  } while (millis() - start < ms);
 }
