@@ -1,6 +1,6 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 1.1
+//Version: 1.2
 //Date: 7/7/2023
 //Author: Tristan McGinnis & Sam Quartuccio
 //Use: Main source code for SAROS test board
@@ -39,8 +39,7 @@ Adafruit_SHT4x sht4 = Adafruit_SHT4x(); //Humidity Sensor Setup
 SFE_UBLOX_GNSS gps; 
 //static const uint32_t GPSBaud = 38400;
 
-boolean setDynamicModel(dynModel newDynamicModel = DYN_MODEL_AIRBORNE4g, uint16_t maxWait = 1100);
-uint8_t getDynamicModel(uint16_t maxWait = 1100); // Get the dynamic model - returns 255 if the sendCommand fails
+
 //
 
 //General Variables
@@ -50,6 +49,9 @@ unsigned int lastShort = 0; //last time polling PDs only
 
 
 void setup() {
+  boolean setDynamicModel(dynModel newDynamicModel = DYN_MODEL_AIRBORNE4g, uint16_t maxWait = 1100);
+  //uint8_t dynamicModelTest = getDynamicModel(uint16_t maxWait = 1100); // Get the dynamic model - returns 255 if the sendCommand fails
+  
   Serial.begin(115200);//USB Interface
   pinMode(25, OUTPUT);//onboard pico LED
   
@@ -70,6 +72,8 @@ void setup() {
 
   pinMode(28, INPUT);//set INPUT pin mode for thermistor
   analogReadResolution(12);//up analog read resolution to 12 bit
+
+
 
   
   // Start Up Sequence
@@ -186,10 +190,9 @@ void loop() {
     Serial1.println(packet);
   }else
   {
-    delay(50);
     packetCt++;
     packet = String(ID)+","+String(mis_time)+","+String(packetCt)+","+String(pd1)+","+String(pd2);
-    Serial.println(packet);
+    //Serial.println(packet);
     Serial1.println(packet);
   }
 
