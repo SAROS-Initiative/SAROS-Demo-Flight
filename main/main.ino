@@ -1,7 +1,7 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 1.3
-//Date: 7/8/2023
+//Version: 1.4
+//Date: 7/12/2023
 //Author: Tristan McGinnis & Sam Quartuccio
 //Use: Main source code for SAROS test board
 ///////////////////
@@ -10,7 +10,7 @@
 #include "SAROS_Util.h"
 
 //Board Details
-String ID = "ST1";
+String ID = "STX";
 
 //Packet Values
 String packet;
@@ -46,6 +46,7 @@ SFE_UBLOX_GNSS gps;
 unsigned int lastBlink = 0; //Last time LED Blinked
 unsigned int lastPoll = 0; //Last time polling major sensors
 unsigned int lastShort = 0; //last time polling PDs only
+unsigned int lastGPS = 0; //last GPS poll
 
 
 void setup() {
@@ -156,15 +157,22 @@ void setup() {
 
 void loop() {
   
-  if(threadFunc(250, millis() , &lastPoll))
+  if(threadFunc(245, millis() , &lastPoll))
   {
     packetCt++;
     bmp.performReading();
 
     sensors_event_t humidity, temp;
     sht4.getEvent(&humidity, &temp);
-    if(Serial2.available())
+
+    pd1 = analogRead(26);
+    pd2 = analogRead(27);
+
+    t_temp = (1.0/(log((200000.0/((4095.0/analogRead(28)) - 1))/200000)/3892.0 + 1.0/(25 + 273.15))) - 273.15; //Calculation for Thermistor
+    
+    if(gps.checkUblox()) //get new GPS data if available
     {
+      Serial.println("GPS Avail.");
       gp_lat = gps.getLatitude();
       gp_lon = gps.getLongitude();
       gp_sats = gps.getSIV();
@@ -173,14 +181,11 @@ void loop() {
       utc_sec = gps.getSecond();
     }
     
-    t_temp = (1.0/(log((200000.0/((4095.0/analogRead(28)) - 1))/200000)/3892.0 + 1.0/(25 + 273.15))) - 273.15;
-
-    pd1 = analogRead(26);
-    pd2 = analogRead(27);
-    
     //mis_time = millis()/1000.00;
     mis_time = millis()/1000.0;
-    
+
+
+    //Large-Format 4hz packet
     packet = ID + "," + String(mis_time) +","+ String(utc_hr) + ":" + String(utc_min) + ":" + String(utc_sec) + ",";
     packet += String(packetCt)+","+String(bmp.readAltitude(sea_level))+","+String(t_temp)+",";
     packet += String(gp_lat)+","+String(gp_lon)+","+String(gp_sats)+","+String(gp_alt)+","+String(bmp.pressure/100.0)+",";
@@ -190,10 +195,11 @@ void loop() {
     Serial1.println(packet);
   }else
   {
+    //Small-Format no limit packet
     if(millis()/1000.0 <= 14400.0)//Only run for 4 hours
     {
       packetCt++;
-      packet = String(ID)+","+String(mis_time)+","+String(packetCt)+","+String(pd1)+","+String(pd2);
+      packet = String(ID)+","+String(mis_time)+",,"+String(packetCt)+",,,,,,,,,,"+String(pd1)+","+String(pd2)+",,,,,,,,,,,,";
       //Serial.println(packet);
       Serial1.println(packet);
     }
