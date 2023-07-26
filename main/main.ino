@@ -1,7 +1,7 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 1.4
-//Date: 7/12/2023
+//Version: 1.5
+//Date: 7/25/2023
 //Author: Tristan McGinnis & Sam Quartuccio
 //Use: Main source code for SAROS test board
 ///////////////////
@@ -123,6 +123,7 @@ void setup() {
   {
     Serial.println("YIC on 9600, switching to 38400");//38400 example suggestion
     gps.setSerialRate(38400);
+    gps.setNavigationFrequency(5);
   }
   delay(2000);
   Serial2.begin(38400);
@@ -155,9 +156,11 @@ void setup() {
   Serial1.println("-----------------------"); 
 }
 
+//henry.sun@yic.com
+
 void loop() {
-  
-  if(threadFunc(245, millis() , &lastPoll))
+  //Serial.println(millis());
+  if(threadFunc(240, millis() , &lastPoll))
   {
     packetCt++;
     bmp.performReading();
@@ -169,10 +172,12 @@ void loop() {
     pd2 = analogRead(27);
 
     t_temp = (1.0/(log((200000.0/((4095.0/analogRead(28)) - 1))/200000)/3892.0 + 1.0/(25 + 273.15))) - 273.15; //Calculation for Thermistor
-    
+
+    //This check function freezes the process.
+    /*
     if(gps.checkUblox()) //get new GPS data if available
     {
-      Serial.println("GPS Avail.");
+      //Serial.println("GPS Avail.");
       gp_lat = gps.getLatitude();
       gp_lon = gps.getLongitude();
       gp_sats = gps.getSIV();
@@ -180,16 +185,18 @@ void loop() {
       utc_min = gps.getMinute();
       utc_sec = gps.getSecond();
     }
+    */
+
     
     //mis_time = millis()/1000.00;
     mis_time = millis()/1000.0;
 
 
     //Large-Format 4hz packet
-    packet = ID + "," + String(mis_time) +","+ String(utc_hr) + ":" + String(utc_min) + ":" + String(utc_sec) + ",";
-    packet += String(packetCt)+","+String(bmp.readAltitude(sea_level))+","+String(t_temp)+",";
+    packet = ID + "," + String(packetCt) + "," + String(mis_time) + "," + String(pd1)+","+String(pd2) + ",";
+    packet += String(t_temp) + "," + String(utc_hr) + ":" + String(utc_min) + ":" + String(utc_sec) + "," + String(bmp.readAltitude(sea_level))+",";
     packet += String(gp_lat)+","+String(gp_lon)+","+String(gp_sats)+","+String(gp_alt)+","+String(bmp.pressure/100.0)+",";
-    packet += String(bmp.temperature)+","+String(humidity.relative_humidity)+","+String(pd1)+","+String(pd2)+",";
+    packet += String(bmp.temperature)+","+String(humidity.relative_humidity)+",";
     packet += readBno(bno, 1) +","+readBno(bno, 2)+","+readBno(bno, 3)+","+readBno(bno, 4);
     Serial.println(packet);
     Serial1.println(packet);
@@ -199,7 +206,7 @@ void loop() {
     if(millis()/1000.0 <= 14400.0)//Only run for 4 hours
     {
       packetCt++;
-      packet = String(ID)+","+String(mis_time)+",,"+String(packetCt)+",,,,,,,,,,"+String(pd1)+","+String(pd2)+",,,,,,,,,,,,";
+      packet = String(ID)+","+String(packetCt)+","+ String(mis_time) +""+String(pd1)+","+String(pd2) + "," + String(t_temp) + ",,,,,,,,,,,,,,,,";
       //Serial.println(packet);
       Serial1.println(packet);
     }
