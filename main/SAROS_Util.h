@@ -14,6 +14,8 @@
 #include <utility/imumaths.h> 
 #include "Adafruit_BMP3XX.h" 
 #include "Adafruit_SHT4x.h" 
+#include <SD.h>
+#include <SPI.h>
 
 sensors_event_t orientationData , angVelocityData , linearAccelData, magnetometerData, accelerometerData, gravityData;
 
