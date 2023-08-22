@@ -1,6 +1,6 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 1.5c
+//Version: 1.6a
 //Date: 8/21/2023
 //Author: Tristan McGinnis & Sam Quartuccio
 //Use: Main source code for SAROS test board
@@ -56,7 +56,7 @@ const int _MOSI = 11;
 const int _CS = 9;
 const int _SCK = 10;
 //File dataFile = SD.open("example.txt", FILE_WRITE);
-String fileName = "example.txt";
+int fileCt = 0;
 
 
 
@@ -86,17 +86,31 @@ void setup() {
     Serial.println("initialization done.");
   }
 
-  if (SD.exists("example.txt")) {
-    Serial.println("example.txt exists.");
-  } else {
-    Serial.println("example.txt doesn't exist.");
+  //Create up to 20 unique output files
+  String stringPrint = "";
+  for(int i = 0; i < 20; i++)
+  {
+    if (SD.exists(String("data_out_"+i))) {
+      stringPrint = "data_out_"+ String(i) + "already exists";
+      Serial.println(stringPrint);
+    } else {
+      stringPrint = "data_out_" + String(i) + " does not exist. Creating: data_out_" + String(i);
+      Serial.println(stringPrint);
+      fileCt = i;
+      break;
+    }
+    if(i == 20)
+    {
+      Serial.println("File limit reached!");
+    }
   }
+  
 
+  
   File dataFile = SD.open("example.txt", FILE_WRITE);
   dataFile.println("TEST PRINT");
   dataFile.close();
   
-
 
   //Serial1.setRX(13);
   //Serial1.setTX(12);  Serial1.begin(250000);//Adafruit OpenLog Interface (TEMP)
@@ -122,9 +136,11 @@ void setup() {
   Serial.println("-----------------------"); 
   Serial.println("Start Up Sequence"); 
   Serial.println("-----------------------"); 
+  
   dataFile.println("-----------------------"); 
   dataFile.println("Start Up Sequence"); 
   dataFile.println("-----------------------"); 
+  
 
 
   //  BNO055 Check
@@ -187,10 +203,11 @@ void setup() {
   Serial.println("-----------------------"); 
   Serial.println("Start Up Sequence Complete"); 
   Serial.println("-----------------------"); 
+  
   dataFile.println("-----------------------"); 
   dataFile.println("Start Up Sequence Complete"); 
   dataFile.println("-----------------------"); 
-
+  
 
   
 }
@@ -200,7 +217,9 @@ void setup() {
 void loop() {
   //Serial.println(millis());
   //File dataFile = SD.open("example.txt", FILE_WRITE);
-  File dataFile = SD.open("REAL.txt", FILE_WRITE);
+  String fName = "data_out_" + String(fileCt);
+  File dataFile = SD.open(fName, FILE_WRITE);
+
   while(mis_time <= 14400)//run for 4 hours
   {
     mis_time = millis()/1000.0;
