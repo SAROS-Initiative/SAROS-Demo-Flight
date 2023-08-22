@@ -1,7 +1,7 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 1.5b
-//Date: 8/10/2023
+//Version: 1.5c
+//Date: 8/21/2023
 //Author: Tristan McGinnis & Sam Quartuccio
 //Use: Main source code for SAROS test board
 ///////////////////
@@ -251,7 +251,7 @@ void loop() {
       if(mis_time <= 14400.0)//Only run for 4 hours
       {
         packetCt++;
-        packet = String(ID)+","+String(packetCt)+","+ String(mis_time) +""+String(pd1)+","+String(pd2) + "," + String(t_temp) + ",,,,,,,,,,,,,,,,";
+        packet = String(ID)+","+String(packetCt)+","+ String(mis_time) +","+String(pd1)+","+String(pd2) + "," + String(t_temp) + ",,,,,,,,,,,,,,,,";
         //Serial.println(packet);
         dataFile.println(packet);
         //dataFile.flush();
