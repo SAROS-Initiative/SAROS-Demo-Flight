@@ -1,7 +1,7 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 1.6a
-//Date: 8/21/2023
+//Version: 1.6b
+//Date: 8/22/2023
 //Author: Tristan McGinnis & Sam Quartuccio
 //Use: Main source code for SAROS test board
 ///////////////////
@@ -217,12 +217,17 @@ void setup() {
 void loop() {
   //Serial.println(millis());
   //File dataFile = SD.open("example.txt", FILE_WRITE);
-  String fName = "data_out_" + String(fileCt);
+  String fName = "data_out_" + String(fileCt)+".txt";
   File dataFile = SD.open(fName, FILE_WRITE);
 
-  while(mis_time <= 14400)//run for 4 hours
+  while(mis_time <= 21600)//run for 6 hours
   {
     mis_time = millis()/1000.0;
+
+    pd1 = analogRead(26);
+    pd2 = analogRead(27);
+    t_temp = (1.0/(log((200000.0/((4095.0/analogRead(28)) - 1))/200000)/3892.0 + 1.0/(25 + 273.15))) - 273.15; //Calculation for Thermistor
+
     if(threadFunc(240, millis() , &lastPoll))
     {
       packetCt++;
@@ -230,11 +235,6 @@ void loop() {
 
       sensors_event_t humidity, temp;
       sht4.getEvent(&humidity, &temp);
-
-      pd1 = analogRead(26);
-      pd2 = analogRead(27);
-
-      t_temp = (1.0/(log((200000.0/((4095.0/analogRead(28)) - 1))/200000)/3892.0 + 1.0/(25 + 273.15))) - 273.15; //Calculation for Thermistor
 
       //This check function freezes the process.
       /*
@@ -267,7 +267,7 @@ void loop() {
     }else
     {
       //Small-Format no limit packet
-      if(mis_time <= 14400.0)//Only run for 4 hours
+      if(mis_time <= 14400.00)//Only run for 4 hours
       {
         packetCt++;
         packet = String(ID)+","+String(packetCt)+","+ String(mis_time) +","+String(pd1)+","+String(pd2) + "," + String(t_temp) + ",,,,,,,,,,,,,,,,";
