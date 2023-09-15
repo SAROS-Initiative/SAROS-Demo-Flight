@@ -1,18 +1,23 @@
 //////////////////
 //SAROS_Util
-//Version: 1.1
-//Date: 7/7/2023
-//Supported Main: 1.X
+//Version: 1.3
+//Date: 09/15/2023
+//Supported Main: 2.X
 //Author: Tristan McGinnis
 //Use: Contains supplementary functions and values used for SAROS payloads
 ///////////////////
 #include <Wire.h> 
 
+
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
 #include <Adafruit_Sensor.h> 
 #include <Adafruit_BNO055.h> 
-#include <utility/imumaths.h> 
-#include "Adafruit_BMP3XX.h" 
+#include <utility/imumaths.h>
+#include "Zanshin_BME680.h"
+//#include "libraries/BME680/src/Zanshin_BME680.h"
+//#include "Adafruit_BME680.h"
+//#include "libraries/cus_bme680/BME680.h"
+#include "ADS1X15.h"
 #include "Adafruit_SHT4x.h" 
 #include <SD.h>
 #include <SPI.h>
@@ -27,7 +32,7 @@ void setWire0(int pin_SCL, int pin_SDA);
 void setWire1(int pin_SCL, int pin_SDA);
 boolean threadFunc(int freq, unsigned int curTime , unsigned int *lastRun);
 
-
+String getBoardID();
 
 
 void setWire0(int pin_SCL, int pin_SDA)
@@ -138,6 +143,32 @@ String printEvent(sensors_event_t* event) {
   returnValues = String(x) + "," + String(y) + "," + String(z);
   return returnValues;
 }
+
+
+String getBoardID()
+{
+  //Pull the board ID# from the id.txt file on the SD card
+  if (SD.exists("id.txt"))
+  {
+    String inputID = "";
+    File idFile = SD.open("id.txt", FILE_READ);
+    while (idFile.available())
+    {
+      char buf = char(idFile.read());
+      
+      inputID += buf;
+    }
+    String String_ID = String(inputID);
+    idFile.close();
+    return String_ID;
+  }else
+  {
+    return "ERR";
+  }
+
+}
+
+
 
 
 
