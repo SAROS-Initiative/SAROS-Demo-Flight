@@ -26,6 +26,7 @@ long gp_lat, gp_lon, gp_alt;
 static int32_t b_temp, b_humidity, b_press, b_gas;
 
 
+
 //BNO Setup
 //uint16_t BNO055_SAMPLERATE_DELAY_MS = 5;
 Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28, &Wire1); // passed Wire into BNO055
@@ -55,6 +56,7 @@ ADS1115 ADS(0x49, &Wire1);
 
 //General Variables
 unsigned int lastBlink = 0; //Last time LED Blinked
+int LEDS = 0; //LED status
 unsigned int lastPoll = 0; //Last time polling major sensors
 unsigned int lastShort = 0; //last time polling PDs only
 unsigned int lastGPS = 0; //last GPS poll
@@ -212,12 +214,18 @@ void setup() {
 
   //  GPS Check
   //Serial2.begin(9600);
-  if (gps.begin(Wire1, 0x42))
+  gps.begin(Wire1, 0x42);
+  if (gps.getLatitude() != 0)
   {
+
     //Serial.println("GPS on 9600, switching to 38400");//38400 example suggestion
     //gps.setSerialRate(38400);
+    Serial.println("NEO-M9N\t[X]");
     gps.setNavigationFrequency(9);
     gps.setI2COutput(COM_TYPE_UBX);
+  }else
+  {
+    Serial.println("NEO-M9N\t[]");
   }
 
   /*delay(2000);
@@ -274,8 +282,25 @@ void loop() {
   File dataFile = SD.open(fName, FILE_WRITE); //Open data output file
   ADS.setGain(0);
 
+  
+
   while(mis_time <= 21600)//run for 6 hours
   {
+
+    //LED Blinking
+    if(threadFunc(250, millis(), &lastBlink))
+    {
+      if(LEDS == 0)
+      {
+        digitalWrite(25, HIGH);
+        LEDS = 1;
+      }else
+      {
+        digitalWrite(25, LOW);
+        LEDS = 0;
+      }
+    }
+
     mis_time = millis()/1000.0; //get mission time (system clock time)
 
     pd1 = ADS.readADC(0); //read photodiode 1
