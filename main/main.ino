@@ -1,6 +1,6 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 2.0
+//Version: 2.1
 //Date: 09/15/2023
 //Author: Tristan McGinnis & Sam Quartuccio
 //Use: Main source code for SAROS test board
@@ -49,7 +49,8 @@ SFE_UBLOX_GNSS gps;
 //static const uint32_t GPSBaud = 38400;
 
 //ADC to I2C ADS1015
-ADS1115 ADS(0x49, &Wire1);
+ADS1015 ADS(0x49, &Wire1);
+//Adafruit_ADS1015 ADS;
 
 //
 
@@ -79,7 +80,7 @@ void setup() {
   Serial.begin(115200);//USB Interface
   pinMode(25, OUTPUT);//onboard pico LED
   
-  setWire1(3,2);
+  setWire1(3,2);//(sda, scl)
   Wire1.begin();
   //Wire1.setClock(500000);
   
@@ -201,15 +202,18 @@ void setup() {
   }
 
   //  ADS1015 Check
-  if (!ADS.begin()){
+  if (!ADS.begin()){//for adafruit, set ADS.begin(0x49, &Wire1)
     Serial.println("ADS1015\t[ ]");
   }else
   {
     Serial.println("ADS1015\t[X]");
-    ADS.setDataRate(5);
+    ADS.setDataRate(7);//4000 for adafruit library, 7 for other
+    //Serial.println("ADS_DR: "+String(ADS.getDataRate()));
     ADS.setMode(0);
+    ADS.readADC(0);
   }
 
+  
 
 
   //  GPS Check
@@ -221,7 +225,7 @@ void setup() {
     //Serial.println("GPS on 9600, switching to 38400");//38400 example suggestion
     //gps.setSerialRate(38400);
     Serial.println("NEO-M9N\t[X]");
-    gps.setNavigationFrequency(9);
+    gps.setNavigationFrequency(30);
     gps.setI2COutput(COM_TYPE_UBX);
   }else
   {
@@ -253,6 +257,7 @@ void setup() {
   Serial.println("Start Pressure/Alt: "+ String(sea_level) +","+String(bme.readAltitude(sea_level)));
   */
   //Cycle BME to remove initial garbage data
+  
   for(int i = 0; i < 5; i++)
   {
     BME680.getSensorData(b_temp, b_humidity, b_press, b_gas);
@@ -280,15 +285,13 @@ void setup() {
 void loop() {
   String fName = "data_out_" + String(fileCt)+".txt"; //File name chosen based on last created file
   File dataFile = SD.open(fName, FILE_WRITE); //Open data output file
-  ADS.setGain(0);
-
   
-
   while(mis_time <= 21600)//run for 6 hours
   {
-
+    
     //LED Blinking
-    if(threadFunc(250, millis(), &lastBlink))
+    /*
+    if(millis()%500 == 0)
     {
       if(LEDS == 0)
       {
@@ -299,24 +302,35 @@ void loop() {
         digitalWrite(25, LOW);
         LEDS = 0;
       }
-    }
+    }*/
 
     mis_time = millis()/1000.0; //get mission time (system clock time)
 
+    ADS.setGain(0);
+    
     pd1 = ADS.readADC(0); //read photodiode 1
     pd2 = ADS.readADC(1); //read photodiode 2
     pd3 = ADS.readADC(2); //read photodiode 3
     pd4 = ADS.readADC(3); //read photodiode 4
+    
+
+    //pd1 = ADS.readADC_SingleEnded(0);
+    //pd2 = ADS.readADC_SingleEnded(1);
+    //pd2 = ADS.readADC_SingleEnded(2);
+    //pd3 = ADS.readADC_SingleEnded(3);
 
     //t_temp = (1.0/(log((200000.0/((1024.0/analogRead(26)) - 1))/200000)/3892.0 + 1.0/(25 + 273.15))) - 273.15; //Calculation for Thermistor temperature value
     t_temp = analogRead(26);
 
-    if(threadFunc(240, millis() , &lastPoll))//Run large-format packet every 250ms
+    if(threadFunc(500, millis() , &lastPoll))//Run large-format packet every 500ms
     {
+      digitalWrite(25, LOW);
+
       packetCt++;
       //bme.performReading();
       BME680.getSensorData(b_temp, b_humidity, b_press, b_gas);
       String bme_data = String(b_temp/100.0)+","+String(b_press/100.0) + "," +String(b_humidity);
+      
       
       gp_lat = gps.getLatitude();
       gp_lon = gps.getLongitude();
@@ -325,23 +339,11 @@ void loop() {
       utc_hr = gps.getHour();
       utc_min = gps.getMinute();
       utc_sec = gps.getSecond();
+      
 
       sensors_event_t humidity, temp;
       sht4.getEvent(&humidity, &temp);
 
-      //This check function freezes the process.
-      /*
-      if(gps.checkUblox()) //get new GPS data if available
-      {
-        //Serial.println("GPS Avail.");
-        gp_lat = gps.getLatitude();
-        gp_lon = gps.getLongitude();
-        gp_sats = gps.getSIV();
-        utc_hr = gps.getHour();
-        utc_min = gps.getMinute();
-        utc_sec = gps.getSecond();
-      }
-      */
 
       //Large-Format 4hz packet
       packet = ID + "," + String(packetCt) + "," + String(mis_time) + "," + String(pd1)+","+String(pd2) + "," + String(pd3) +","+ String(pd4) +",";
@@ -357,13 +359,13 @@ void loop() {
       //Small-Format no limit packet
       if(mis_time <= 14400.00)//Only run for 4 hours
       {
-        if(threadFunc(1, millis(), &lastShort)){
-          packetCt++;
-          packet = String(ID)+","+String(packetCt)+","+ String(mis_time) +","+String(pd1)+","+String(pd2) + "," + String(pd3)+ ","+String(pd4)+"," + String(t_temp) + ",,,,,,,,,,,,,,,,";
-          //Serial.println(packet);
-          dataFile.println(packet);
-          //dataFile.flush();
-        }
+        digitalWrite(25, HIGH);
+        packetCt++;
+        packet = String(ID)+","+String(packetCt)+","+ String(mis_time) +","+String(pd1)+","+String(pd2) + "," + String(pd3)+ ","+String(pd4)+"," + String(t_temp) + ",,,,,,,,,,,,,,,,";
+        //Serial.println(packet);
+        dataFile.println(packet);
+        //dataFile.flush();
+      
       }
     }
   }

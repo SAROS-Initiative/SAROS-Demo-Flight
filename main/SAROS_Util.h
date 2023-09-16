@@ -1,6 +1,6 @@
 //////////////////
 //SAROS_Util
-//Version: 1.3
+//Version: 1.4
 //Date: 09/15/2023
 //Supported Main: 2.X
 //Author: Tristan McGinnis
@@ -18,6 +18,7 @@
 //#include "Adafruit_BME680.h"
 //#include "libraries/cus_bme680/BME680.h"
 #include "ADS1X15.h"
+//#include <Adafruit_ADS1X15.h>
 #include "Adafruit_SHT4x.h" 
 #include <SD.h>
 #include <SPI.h>
