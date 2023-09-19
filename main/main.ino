@@ -361,7 +361,7 @@ void loop() {
       {
         digitalWrite(25, HIGH);
         packetCt++;
-        packet = String(ID)+","+String(packetCt)+","+ String(mis_time) +","+String(pd1)+","+String(pd2) + "," + String(pd3)+ ","+String(pd4)+"," + String(t_temp) + ",,,,,,,,,,,,,,,,";
+        packet = String(ID)+","+String(packetCt)+","+ String(mis_time) +","+String(pd1)+","+String(pd2) + "," + String(pd3)+ ","+String(pd4)+"," + String(t_temp) + ",,,,,,,,,,,,,,,,,,,,,";
         //Serial.println(packet);
         dataFile.println(packet);
         //dataFile.flush();
