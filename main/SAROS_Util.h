@@ -10,6 +10,8 @@
 
 
 #include <SparkFun_u-blox_GNSS_Arduino_Library.h>
+//#include <SparkFun_u-blox_GNSS_v3.h>
+
 #include <Adafruit_Sensor.h> 
 #include <Adafruit_BNO055.h> 
 #include <utility/imumaths.h>

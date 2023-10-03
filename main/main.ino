@@ -1,14 +1,13 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 2.1
-//Date: 09/15/2023
-//Author: Tristan McGinnis & Sam Quartuccio
+//Version: 2.2
+//Date: 10/03/2023
+//Author: Tristan McGinnis
 //Use: Main source code for SAROS test board
 ///////////////////
 
 // Imports:
 #include "SAROS_Util.h"
-
 
 //Board Details
 String ID = "STX";
@@ -23,7 +22,12 @@ int gp_sats;
 double t_temp, humidity;
 int16_t pd1, pd2, pd3, pd4;
 long gp_lat, gp_lon, gp_alt;
-static int32_t b_temp, b_humidity, b_press, b_gas;
+//static int32_t b_temp, b_humidity, b_press, b_gas;
+int32_t b_temp = 99;
+int32_t b_humidity = 99;
+int32_t b_press = 99;
+int32_t b_gas = 99;
+
 
 
 
@@ -61,6 +65,9 @@ int LEDS = 0; //LED status
 unsigned int lastPoll = 0; //Last time polling major sensors
 unsigned int lastShort = 0; //last time polling PDs only
 unsigned int lastGPS = 0; //last GPS poll
+long test_start;
+long test_fin;
+
 
 //Used for SPI SD Logger
 const int _MISO = 8;
@@ -80,9 +87,11 @@ void setup() {
   Serial.begin(115200);//USB Interface
   pinMode(25, OUTPUT);//onboard pico LED
   
-  setWire1(3,2);//(sda, scl)
+  //setWire1(3,2);//(scl, sda)
+  Wire1.setSCL(3);
+  Wire1.setSDA(2);
   Wire1.begin();
-  //Wire1.setClock(500000);
+  Wire1.setClock(500000);
   
   //Setup for SPI SD Logger
   SPI1.setRX(_MISO);
@@ -126,7 +135,51 @@ void setup() {
     }
   }
 
+
+  //  ADS1015 Check
+  if (!ADS.begin()){//for adafruit, set ADS.begin(0x49, &Wire1)
+    Serial.println("ADS1015\t[ ]");
+  }else
+  {
+    Serial.println("ADS1015\t[X]");
+    
+    //Serial.println("ADS_DR: "+String(ADS.getDataRate()));
+    ADS.setMode(0);
+    ADS.setWireClock(500000);
+    ADS.requestADC(0);
+    ADS.setDataRate(7);//4000 for adafruit library, 7 for other
+    Serial.println("DATA RATE:");
+    Serial.println(String(ADS.getDataRate()));
+    Serial.println("MODE TYPE:");
+    Serial.println(String(ADS.getMode()));
+    
+  }
   
+
+    //  GPS Check
+  //Serial2.begin(9600);
+  while(gps.begin(Wire1, 0x42) == false)
+  {
+    Serial.println("NEO-M9N\t[]");
+    delay(100);
+  }
+    gps.setI2COutput(COM_TYPE_UBX);
+    gps.setNavigationFrequency(5);
+    gps.setI2CpollingWait(250);
+
+  //if (gps.begin(Wire1, 0x42))
+  //{
+
+    //Serial.println("GPS on 9600, switching to 38400");//38400 example suggestion
+    //gps.setSerialRate(38400);
+    Serial.println("NEO-M9N\t[X]");
+    //gps.setNavigationFrequency(5);
+    //uint8_t pollingWait = 50;
+    //gps.setI2CpollingWait(pollingWait);
+
+
+
+
 
   Serial2.setRX(5);
   Serial2.setTX(4);
@@ -134,7 +187,7 @@ void setup() {
   //Serial2.begin(GPSBaud);//GPS interface
 
   pinMode(26, INPUT);//set INPUT pin mode for thermistor
-  analogReadResolution(10);//up analog read resolution to 12 bit- TO BE REPLACED BY I2C ADC Converter
+  //analogReadResolution(10);//up analog read resolution to 12 bit- TO BE REPLACED BY I2C ADC Converter
   
   // Start Up Sequence
   digitalWrite(25, HIGH);//gpio 2/3
@@ -159,7 +212,7 @@ void setup() {
 
 
   //BME680 Check
-  if(!BME680.begin(2000000, 0))
+  if(!BME680.begin(400000, 0))
   {
     Serial.println("BME680\t[ ]");
   }else
@@ -201,36 +254,13 @@ void setup() {
     sht4.setPrecision(SHT4X_HIGH_PRECISION);
   }
 
-  //  ADS1015 Check
-  if (!ADS.begin()){//for adafruit, set ADS.begin(0x49, &Wire1)
-    Serial.println("ADS1015\t[ ]");
-  }else
-  {
-    Serial.println("ADS1015\t[X]");
-    ADS.setDataRate(7);//4000 for adafruit library, 7 for other
-    //Serial.println("ADS_DR: "+String(ADS.getDataRate()));
-    ADS.setMode(0);
-    ADS.readADC(0);
-  }
-
-  
 
 
-  //  GPS Check
-  //Serial2.begin(9600);
-  gps.begin(Wire1, 0x42);
-  if (gps.getLatitude() != 0)
-  {
-
-    //Serial.println("GPS on 9600, switching to 38400");//38400 example suggestion
-    //gps.setSerialRate(38400);
-    Serial.println("NEO-M9N\t[X]");
-    gps.setNavigationFrequency(30);
-    gps.setI2COutput(COM_TYPE_UBX);
-  }else
-  {
-    Serial.println("NEO-M9N\t[]");
-  }
+    
+  //}else
+  //{
+    //Serial.println("NEO-M9N\t[]");
+  //}
 
   /*delay(2000);
   Serial2.begin(38400);
@@ -256,15 +286,22 @@ void setup() {
   double temp_alt = bme.readAltitude(sea_level);
   Serial.println("Start Pressure/Alt: "+ String(sea_level) +","+String(bme.readAltitude(sea_level)));
   */
+
+
+
+
+
   //Cycle BME to remove initial garbage data
-  
+
   for(int i = 0; i < 5; i++)
   {
     BME680.getSensorData(b_temp, b_humidity, b_press, b_gas);
     Serial.println("CLEARING...");
     delay(100);
   }
-  
+
+
+
   /*
   while(1)
   {
@@ -280,96 +317,111 @@ void setup() {
   Serial.println("-----------------------"); 
 }
 
+/*
+  void setup1()
+  {
+    //  ADS1015 Check
+    if (!ADS.begin()){//for adafruit, set ADS.begin(0x49, &Wire1)
+      Serial.println("ADS1015\t[ ]");
+    }else
+    {
+      Serial.println("ADS1015\t[X]");
+      
+      //Serial.println("ADS_DR: "+String(ADS.getDataRate()));
+      ADS.setMode(0);
+      ADS.requestADC(0);
+      ADS.setDataRate(4);//4000 for adafruit library, 7 for other
+    }
+  }
+*/
 //henry.sun@yic.com
 
+
+// void setup1()
+// {
+//   Serial.begin(115200);
+// }
+
+
+
 void loop() {
-  String fName = "data_out_" + String(fileCt)+".txt"; //File name chosen based on last created file
+
+  String fName = "data_out_" + String(fileCt)+".txt"; //File name chosen based on last created file\
+
+
   File dataFile = SD.open(fName, FILE_WRITE); //Open data output file
-  
-  while(mis_time <= 21600)//run for 6 hours
+
+  do//runs for 6 hours
   {
-    
-    //LED Blinking
-    /*
-    if(millis()%500 == 0)
-    {
-      if(LEDS == 0)
-      {
-        digitalWrite(25, HIGH);
-        LEDS = 1;
-      }else
-      {
-        digitalWrite(25, LOW);
-        LEDS = 0;
-      }
-    }*/
+    //test_start = millis();
 
-    mis_time = millis()/1000.0; //get mission time (system clock time)
-
-    ADS.setGain(0);
-    
     pd1 = ADS.readADC(0); //read photodiode 1
     pd2 = ADS.readADC(1); //read photodiode 2
     pd3 = ADS.readADC(2); //read photodiode 3
     pd4 = ADS.readADC(3); //read photodiode 4
-    
-
-    //pd1 = ADS.readADC_SingleEnded(0);
-    //pd2 = ADS.readADC_SingleEnded(1);
-    //pd2 = ADS.readADC_SingleEnded(2);
-    //pd3 = ADS.readADC_SingleEnded(3);
-
-    //t_temp = (1.0/(log((200000.0/((1024.0/analogRead(26)) - 1))/200000)/3892.0 + 1.0/(25 + 273.15))) - 273.15; //Calculation for Thermistor temperature value
     t_temp = analogRead(26);
+    
+    //t_temp = (1.0/(log((200000.0/((1024.0/analogRead(26)) - 1))/200000)/3892.0 + 1.0/(25 + 273.15))) - 273.15; //Calculation for Thermistor temperature value
+    //t_temp = analogRead(26);
 
-    if(threadFunc(500, millis() , &lastPoll))//Run large-format packet every 500ms
+    if(threadFunc(1000, millis() , &lastPoll))//Run large-format packet every 500ms
     {
       digitalWrite(25, LOW);
 
       packetCt++;
       //bme.performReading();
-      BME680.getSensorData(b_temp, b_humidity, b_press, b_gas);
+      BME680.getSensorData(b_temp, b_humidity, b_press, b_gas, false);
       String bme_data = String(b_temp/100.0)+","+String(b_press/100.0) + "," +String(b_humidity);
-      
-      
+
+
       gp_lat = gps.getLatitude();
       gp_lon = gps.getLongitude();
-      gp_sats = gps.getSIV();
+      //gp_sats = gps.getSIV();
       gp_alt = gps.getAltitude();
       utc_hr = gps.getHour();
       utc_min = gps.getMinute();
       utc_sec = gps.getSecond();
       
-
+      
       sensors_event_t humidity, temp;
       sht4.getEvent(&humidity, &temp);
+      double rel_humidity = humidity.relative_humidity;
 
 
       //Large-Format 4hz packet
       packet = ID + "," + String(packetCt) + "," + String(mis_time) + "," + String(pd1)+","+String(pd2) + "," + String(pd3) +","+ String(pd4) +",";
       packet += String(t_temp) + "," + String(utc_hr) + ":" + String(utc_min) + ":" + String(utc_sec) + ",";
       packet += String(gp_lat)+","+String(gp_lon)+","+String(gp_sats)+","+String(gp_alt)+",";
-      packet += String(bme_data)+","+String(humidity.relative_humidity)+",";
+      packet += String(bme_data)+","+String(rel_humidity)+",";
       packet += readBno(bno, 1) +","+readBno(bno, 2)+","+readBno(bno, 3)+","+readBno(bno, 4);
       Serial.println(packet);
       dataFile.println(packet);
       dataFile.flush();
-    }else
+
+      mis_time = millis()/1000.0; //get mission time (system clock time)
+    }else if(threadFunc(1, millis(), &lastShort))
     {
-      //Small-Format no limit packet
-      if(mis_time <= 14400.00)//Only run for 4 hours
-      {
-        digitalWrite(25, HIGH);
-        packetCt++;
-        packet = String(ID)+","+String(packetCt)+","+ String(mis_time) +","+String(pd1)+","+String(pd2) + "," + String(pd3)+ ","+String(pd4)+"," + String(t_temp) + ",,,,,,,,,,,,,,,,,,,,,";
-        //Serial.println(packet);
-        dataFile.println(packet);
-        //dataFile.flush();
-      
-      }
+
+      digitalWrite(25, HIGH);
+      packetCt++;
+      packet = String(ID)+","+String(packetCt)+","+ String(mis_time) +","+String(pd1)+","+String(pd2) + "," + String(pd3)+ ","+String(pd4)+"," + String(t_temp) + ",,,,,,,,,,,,,,,,,,,,,";
+      //Serial.println(packet);
+      dataFile.println(packet);
+      //dataFile.flush();
+      ///Serial.println(String(packetCt));
+      lastShort = millis();
+
     }
-  }
-
-
+    //test_fin = millis() - test_start;
+    //Serial.println(test_fin);
+  }while(mis_time <= 21600);//Run for 6 hours maximum
 
 }
+
+
+// void loop1()
+// {
+//   delay(5000);
+//   Serial.println("PRINT ON CORE1");
+// }
+
