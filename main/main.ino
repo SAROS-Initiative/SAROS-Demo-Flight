@@ -1,7 +1,7 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 2.3
-//Date: 10/04/2023
+//Version: 2.3a
+//Date: 10/05/2023
 //Author: Tristan McGinnis
 //Use: Main source code for SAROS test board
 ///////////////////
@@ -228,6 +228,10 @@ void setup() {
     ledBlink(LED1, 100, 3);//Blink Blue for Success
   }
   
+  //Delay to seperate setup flashes
+  delay(500);
+
+
   //  ADS1015 Check
   if (!ADS.begin()){//for adafruit, set ADS.begin(0x49, &Wire1)
     Serial.println("ADS1015\t[ ]");
@@ -249,6 +253,9 @@ void setup() {
     ledBlink(LED1, 100, 3);//Blink Blue for Success
   }
   
+
+  //Delay to seperate setup flashes
+  delay(500);
 
   //  SHT4 Check 
   if (!sht4.begin(&Wire1)){
