@@ -1,7 +1,7 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 2.2
-//Date: 10/03/2023
+//Version: 2.3
+//Date: 10/04/2023
 //Author: Tristan McGinnis
 //Use: Main source code for SAROS test board
 ///////////////////
@@ -9,8 +9,16 @@
 // Imports:
 #include "SAROS_Util.h"
 
+#define debug 1 //Running in DEBUG mode? Main LEDS will indicate during loop
+
+//Constants
+#define LED1 15
+#define LED2 14
+#define LED3 13
+#define LED0 25
+
 //Board Details
-String ID = "STX";
+String ID = "SX";
 
 //Packet Values
 String packet;
@@ -42,14 +50,14 @@ double sea_level = 1013.25;
 BME680_Class BME680;
 //Bme68x bme;//bme object for BOSH Bme6 library
 
-
-
 //Humidity Sensor
 Adafruit_SHT4x sht4 = Adafruit_SHT4x(); //Humidity Sensor Setup
 
-
 //GPS Setup
 SFE_UBLOX_GNSS gps; 
+int gpsLock = 0;
+int gpsLockAttempts = 0;
+int gpsFound = 0;
 //static const uint32_t GPSBaud = 38400;
 
 //ADC to I2C ADS1015
@@ -59,14 +67,10 @@ ADS1015 ADS(0x49, &Wire1);
 //
 
 
-//General Variables
-unsigned int lastBlink = 0; //Last time LED Blinked
-int LEDS = 0; //LED status
-unsigned int lastPoll = 0; //Last time polling major sensors
-unsigned int lastShort = 0; //last time polling PDs only
-unsigned int lastGPS = 0; //last GPS poll
-long test_start;
-long test_fin;
+//Timing Variables
+unsigned long lastPoll = 0; //Last time polling major sensors
+unsigned long lastShort = 0; //last time polling PDs only
+unsigned long lastGPSLockCheck = 0;
 
 
 //Used for SPI SD Logger
@@ -75,6 +79,8 @@ const int _MOSI = 11;
 const int _CS = 9;
 const int _SCK = 10;
 //File dataFile = SD.open("example.txt", FILE_WRITE);
+
+
 int fileCt = 0;
 
 
@@ -85,8 +91,15 @@ void setup() {
   //uint8_t dynamicModelTest = getDynamicModel(uint16_t maxWait = 1100); // Get the dynamic model - returns 255 if the sendCommand fails
   
   Serial.begin(115200);//USB Interface
-  pinMode(25, OUTPUT);//onboard pico LED
   
+
+  //LEDs
+  pinMode(LED1, OUTPUT); // Blue
+  pinMode(LED2, OUTPUT); // Green
+  pinMode(LED3, OUTPUT); // Red
+  pinMode(LED0, OUTPUT);//onboard pico LED
+
+
   //setWire1(3,2);//(scl, sda)
   Wire1.setSCL(3);
   Wire1.setSDA(2);
@@ -103,21 +116,41 @@ void setup() {
   delay(2000);
   digitalWrite(25, LOW);
 
+  pinMode(26, INPUT);//set INPUT pin mode for thermistor
+  //analogReadResolution(10);//up analog read resolution to 12 bit- TO BE REPLACED BY I2C ADC Converter
+  
 
   if (!SD.begin(_CS, SPI1)) {
     Serial.println("SD initialization failed!");
-    //return;
+    ledCode(LED1, LED2, LED3, 2);//Code BGR Off/Off/Flashing
   }else{
-    Serial.println("SD initialization done.");
+    Serial.println("SD initialized.");
+    ledBlink(LED1, 100, 3);//Blink Blue for Success
   }
 
-  ID = "ST" + String(getBoardID()); //Get assigned board ID from id.txt on SD card
+  ID = "S" + String(getBoardID()); //Get assigned board ID from id.txt on SD card
+  if(ID == "SERR")
+  {
+    ledCode(LED1, LED2, LED3, 11);//Code BGR Flashing/Off/Flashing
+  }
 
   //Increment file name id to generate different output files upon reset
-  for(int i = 0; i < 20; i++)
+  for(int i = 0; i < 25; i++)
   {
     String stringPrint = "";
-    String fileName = "data_out_"+String(i)+".txt";
+    String fileName = String(ID)+"_data_out_"+String(i)+".txt";
+
+    if(i == 24)
+    {
+      Serial.println("File limit reached!"); 
+
+      digitalWrite(LED1, HIGH);
+      digitalWrite(LED2, HIGH);
+      ledCode(LED1, LED2, LED3, 3);//Code BGR Stable/Flashing/Off
+
+      fileCt = 99;
+    }
+
     if (SD.exists(fileName)) {
       stringPrint = fileName + " already exists";
       Serial.println(stringPrint);
@@ -126,19 +159,79 @@ void setup() {
       stringPrint = fileName + " does not exist. Creating: data_out_" + String(i);
       Serial.println(stringPrint);
       fileCt = i;
+
+      ledBlink(LED1, 100, 3);//Blink Blue for Success
       break;
     }
-    if(i == 20)
+
+  }
+  
+
+  //GPS Check
+  //Serial2.begin(9600);
+  for(int i = 0; i < 11; i++)//Try to start GPS for 10 seconds
+  {
+    if(gps.begin(Wire1, 0x42) == true)
     {
-      Serial.println("File limit reached!");
-      fileCt = 99;
+      gps.setI2COutput(COM_TYPE_UBX);
+      gps.setNavigationFrequency(4);
+      gps.setI2CpollingWait(250);
+
+      Serial.println("NEO-M9N\t[X]");
+
+      gpsFound = 1;
+      ledBlink(LED1, 100, 3);//Blink Blue for Success
+      break;
     }
+    Serial.println("NEO-M9N\t[]");
+    if(i == 10)//If not started after 10 seconds
+    {
+      ledCode(LED1, LED2, LED3, 6);//Code BGR Off/Stable/Flashing
+      break;
+    }
+    delay(1000);
   }
 
 
+  //  BNO055 Check
+  if (!bno.begin()){
+    Serial.println("BNO055\t[ ]");
+    ledCode(LED1, LED2, LED3, 10);//Code BGR Off/Flashing/Flashing
+  }else
+  {
+    Serial.println("BNO055\t[X]");
+    ledBlink(LED1, 100, 3);//Blink Blue for Success
+  }
+  
+
+  //BME680 Check
+  if(!BME680.begin(500000, 0))
+  {
+    Serial.println("BME680\t[ ]");
+    ledCode(LED1, LED2, LED3, 4);//Code BGR Stable/Off/Flashing
+  }else
+  {
+    Serial.println("BME680\t[X]");
+    BME680.setOversampling(TemperatureSensor, Oversample16);  // Use enumerated type values
+    BME680.setOversampling(HumiditySensor, Oversample16);     // Use enumerated type values
+    BME680.setOversampling(PressureSensor, Oversample16);     // Use enumerated type values
+    BME680.setIIRFilter(IIR4);
+    BME680.setGas(0,0);
+    
+    //Cycle BME to remove initial garbage data
+    for(int i = 0; i < 5; i++)
+    {
+      BME680.getSensorData(b_temp, b_humidity, b_press, b_gas);
+      Serial.println("CLEARING...");
+      delay(100);
+    }
+    ledBlink(LED1, 100, 3);//Blink Blue for Success
+  }
+  
   //  ADS1015 Check
   if (!ADS.begin()){//for adafruit, set ADS.begin(0x49, &Wire1)
     Serial.println("ADS1015\t[ ]");
+    ledCode(LED1, LED2, LED3, 7);//Code BGR Flashing/Off/Stable
   }else
   {
     Serial.println("ADS1015\t[X]");
@@ -153,235 +246,106 @@ void setup() {
     Serial.println("MODE TYPE:");
     Serial.println(String(ADS.getMode()));
     
+    ledBlink(LED1, 100, 3);//Blink Blue for Success
   }
-  
-
-    //  GPS Check
-  //Serial2.begin(9600);
-  while(gps.begin(Wire1, 0x42) == false)
-  {
-    Serial.println("NEO-M9N\t[]");
-    delay(100);
-  }
-    gps.setI2COutput(COM_TYPE_UBX);
-    gps.setNavigationFrequency(5);
-    gps.setI2CpollingWait(250);
-
-  //if (gps.begin(Wire1, 0x42))
-  //{
-
-    //Serial.println("GPS on 9600, switching to 38400");//38400 example suggestion
-    //gps.setSerialRate(38400);
-    Serial.println("NEO-M9N\t[X]");
-    //gps.setNavigationFrequency(5);
-    //uint8_t pollingWait = 50;
-    //gps.setI2CpollingWait(pollingWait);
-
-
-
-
-
-  Serial2.setRX(5);
-  Serial2.setTX(4);
-  //set Pins for GPS, UART line begins during test
-  //Serial2.begin(GPSBaud);//GPS interface
-
-  pinMode(26, INPUT);//set INPUT pin mode for thermistor
-  //analogReadResolution(10);//up analog read resolution to 12 bit- TO BE REPLACED BY I2C ADC Converter
-  
-  // Start Up Sequence
-  digitalWrite(25, HIGH);//gpio 2/3
-  delay(2000);
-  digitalWrite(25, LOW);
-  delay(500);
-
-  Serial.println("-----------------------"); 
-  Serial.println("Start Up Sequence"); 
-  Serial.println("-----------------------"); 
-  
-
-
-  //  BNO055 Check
-  if (!bno.begin()){
-    Serial.println("BNO055\t[ ]");
-  }else
-  {
-    Serial.println("BNO055\t[X]");
-  }
-  
-
-
-  //BME680 Check
-  if(!BME680.begin(400000, 0))
-  {
-    Serial.println("BME680\t[ ]");
-  }else
-  {
-    Serial.println("BME680\t[X]");
-    BME680.setOversampling(TemperatureSensor, Oversample16);  // Use enumerated type values
-    BME680.setOversampling(HumiditySensor, Oversample16);     // Use enumerated type values
-    BME680.setOversampling(PressureSensor, Oversample16);     // Use enumerated type values
-    BME680.setIIRFilter(IIR4);
-    BME680.setGas(0,0);
-  }
-
-
-  //  BME680 Check
-  /*
-  if (!bme.begin()){
-    Serial.println("BME680\t[ ]");
-  }else
-  {
-    Serial.println("BME680\t[X]");
-    bme.setTemperatureOversampling(BME680_OS_8X);
-    bme.setHumidityOversampling(BME680_OS_2X);
-    bme.setPressureOversampling(BME680_OS_4X);
-    bme.setIIRFilterSize(BME680_FILTER_SIZE_3);
-    bme.setGasHeater(0,0); // 320*C for 150 ms
-    //bme.setSensorMode(BME680_PARALLEL_MODE);
-    //bme.setODR(BME68X_ODR_NONE);
-    //bme68x_set_op_mode(1);
-  }
-  */
   
 
   //  SHT4 Check 
   if (!sht4.begin(&Wire1)){
     Serial.println("SHT4X\t[ ]");
+    ledCode(LED1, LED2, LED3, 8);//Code BGR Off/Flashing/Stable
   }else
   {
     Serial.println("SHT4X\t[X]");
     sht4.setPrecision(SHT4X_HIGH_PRECISION);
+
+    ledBlink(LED1, 100, 3);//Blink Blue for Success
   }
 
 
-
-    
-  //}else
-  //{
-    //Serial.println("NEO-M9N\t[]");
-  //}
-
-  /*delay(2000);
-  Serial2.begin(38400);
-  if (gps.begin(Serial2))
+  if(gpsFound)
   {
-    Serial.println("GPS on 38400");
-    gps.setUART1Output(COM_TYPE_UBX); //Set the UART port to output UBX only
-    gps.setI2COutput(COM_TYPE_UBX); //Set the I2C port to output UBX only (turn off NMEA noise)
-    gps.saveConfiguration(); //Save the current settings to flash and BBR
+    for(int j = 0; j < 80; j++)//Try for ~4 minutes (total of 3 second delay per attempt)
+    {
+      if(gps.getSIV() >= 3)
+      {
+        Serial.println("GPS SIV:");
+        Serial.println(String(gps.getSIV()));
+        gpsLock = 1;
+        ledCode(LED1, LED2, LED3, -1);//Code BGR Flashing/Flashing/Flashing
+        break;
+      }
+      ledBlink(LED3, 100, 5);//Flash RED for 1 second
+      delay(2000);
+    }
+    delay(1000);
   }
-  */
-
-
-  //Cycle BME to remove initial garbage data
-  /*
-  for(int i = 0; i < 5; i++)
-  {
-    bme.performReading();
-  }
-  //Get Starting Pressure
-  bme.performReading();
-  sea_level = bme.pressure / 100.0;
-  double temp_alt = bme.readAltitude(sea_level);
-  Serial.println("Start Pressure/Alt: "+ String(sea_level) +","+String(bme.readAltitude(sea_level)));
-  */
-
-
-
-
-
-  //Cycle BME to remove initial garbage data
-
-  for(int i = 0; i < 5; i++)
-  {
-    BME680.getSensorData(b_temp, b_humidity, b_press, b_gas);
-    Serial.println("CLEARING...");
-    delay(100);
-  }
-
-
-
-  /*
-  while(1)
-  {
-    BME680.getSensorData(b_temp, b_humidity, b_press, b_gas);
-    String testS = String(b_press/100.0);
-    Serial.println(String(testS));
-  }
-*/
-
 
   Serial.println("-----------------------"); 
   Serial.println("Start Up Sequence Complete"); 
   Serial.println("-----------------------"); 
+  ledCode(LED1, LED2, LED3, 20);
+
 }
 
-/*
-  void setup1()
-  {
-    //  ADS1015 Check
-    if (!ADS.begin()){//for adafruit, set ADS.begin(0x49, &Wire1)
-      Serial.println("ADS1015\t[ ]");
-    }else
-    {
-      Serial.println("ADS1015\t[X]");
-      
-      //Serial.println("ADS_DR: "+String(ADS.getDataRate()));
-      ADS.setMode(0);
-      ADS.requestADC(0);
-      ADS.setDataRate(4);//4000 for adafruit library, 7 for other
-    }
-  }
-*/
+
 //henry.sun@yic.com
 
-
-// void setup1()
-// {
-//   Serial.begin(115200);
-// }
-
-
-
+/////////////
+//Main Loop Start
+/////////////
 void loop() {
 
-  String fName = "data_out_" + String(fileCt)+".txt"; //File name chosen based on last created file\
-
-
+  String fName = String(ID)+"_data_out_" + String(fileCt)+".txt"; //File name chosen based on last created file
   File dataFile = SD.open(fName, FILE_WRITE); //Open data output file
 
   do//runs for 6 hours
   {
-    //test_start = millis();
 
     pd1 = ADS.readADC(0); //read photodiode 1
     pd2 = ADS.readADC(1); //read photodiode 2
     pd3 = ADS.readADC(2); //read photodiode 3
     pd4 = ADS.readADC(3); //read photodiode 4
-    t_temp = analogRead(26);
-    
-    //t_temp = (1.0/(log((200000.0/((1024.0/analogRead(26)) - 1))/200000)/3892.0 + 1.0/(25 + 273.15))) - 273.15; //Calculation for Thermistor temperature value
-    //t_temp = analogRead(26);
 
-    if(threadFunc(1000, millis() , &lastPoll))//Run large-format packet every 500ms
+
+    t_temp = analogRead(26);
+    //t_temp = (1.0/(log((200000.0/((1024.0/analogRead(26)) - 1))/200000)/3892.0 + 1.0/(25 + 273.15))) - 273.15; //Calculation for Thermistor temperature value
+
+    if(threadFunc(1000, millis() , &lastPoll))//Run large-format packet every 1000ms
     {
-      digitalWrite(25, LOW);
+      ledToggle(25);
 
       packetCt++;
       //bme.performReading();
       BME680.getSensorData(b_temp, b_humidity, b_press, b_gas, false);
       String bme_data = String(b_temp/100.0)+","+String(b_press/100.0) + "," +String(b_humidity);
 
+      if(gpsFound)
+      {
+        if(debug)
+        {
+          if(threadFunc(30000, millis(), &lastGPSLockCheck)) //Check if GPS is locked every 30 seconds
+          {
+            if(gps.getSIV() >=3)
+            {
+              gpsLock = 1;
+              digitalWrite(LED3, HIGH); //RED LED ON
+            }else
+            {
+              gpsLock = 0;
+              digitalWrite(LED3, LOW); //RED LED OFF
+            }
+          }
+        }
 
-      gp_lat = gps.getLatitude();
-      gp_lon = gps.getLongitude();
-      //gp_sats = gps.getSIV();
-      gp_alt = gps.getAltitude();
-      utc_hr = gps.getHour();
-      utc_min = gps.getMinute();
-      utc_sec = gps.getSecond();
-      
+        gp_lat = gps.getLatitude();
+        gp_lon = gps.getLongitude();
+        //gp_sats = gps.getSIV();
+        gp_alt = gps.getAltitude();
+        utc_hr = gps.getHour();
+        utc_min = gps.getMinute();
+        utc_sec = gps.getSecond();
+      }
       
       sensors_event_t humidity, temp;
       sht4.getEvent(&humidity, &temp);
@@ -399,10 +363,9 @@ void loop() {
       dataFile.flush();
 
       mis_time = millis()/1000.0; //get mission time (system clock time)
-    }else if(threadFunc(1, millis(), &lastShort))
+    }else if(threadFunc(1, millis(), &lastShort)) //run high-freq no more than 1khz
     {
 
-      digitalWrite(25, HIGH);
       packetCt++;
       packet = String(ID)+","+String(packetCt)+","+ String(mis_time) +","+String(pd1)+","+String(pd2) + "," + String(pd3)+ ","+String(pd4)+"," + String(t_temp) + ",,,,,,,,,,,,,,,,,,,,,";
       //Serial.println(packet);
@@ -416,12 +379,5 @@ void loop() {
     //Serial.println(test_fin);
   }while(mis_time <= 21600);//Run for 6 hours maximum
 
-}
-
-
-// void loop1()
-// {
-//   delay(5000);
-//   Serial.println("PRINT ON CORE1");
-// }
+}// Main loop end
 
