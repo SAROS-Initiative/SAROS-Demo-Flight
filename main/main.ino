@@ -1,7 +1,7 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 2.3a
-//Date: 10/05/2023
+//Version: 2.3b
+//Date: 10/07/2023
 //Author: Tristan McGinnis
 //Use: Main source code for SAROS test board
 ///////////////////
@@ -9,7 +9,12 @@
 // Imports:
 #include "SAROS_Util.h"
 
+// Debug settings
 #define debug 1 //Running in DEBUG mode? Main LEDS will indicate during loop
+                //GPS will periodicall test for a lock every 30 seconds during main loop
+
+
+#define skipGPSLock 1 //Skip waiting for GPS lock?
 
 //Constants
 #define LED1 15
@@ -270,7 +275,7 @@ void setup() {
   }
 
 
-  if(gpsFound)
+  if(gpsFound && !skipGPSLock)
   {
     for(int j = 0; j < 80; j++)//Try for ~4 minutes (total of 3 second delay per attempt)
     {
