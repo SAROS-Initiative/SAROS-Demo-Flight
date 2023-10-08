@@ -1,7 +1,7 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 2.3b
-//Date: 10/07/2023
+//Version: 2.4
+//Date: 10/08/2023
 //Author: Tristan McGinnis
 //Use: Main source code for SAROS test board
 ///////////////////
@@ -12,9 +12,7 @@
 // Debug settings
 #define debug 1 //Running in DEBUG mode? Main LEDS will indicate during loop
                 //GPS will periodicall test for a lock every 30 seconds during main loop
-
-
-#define skipGPSLock 1 //Skip waiting for GPS lock?
+#define skipGPSLock 0 //Skip waiting for GPS lock?
 
 //Constants
 #define LED1 15
@@ -32,7 +30,7 @@ int mis_hr, mis_min;
 double mis_time;
 long int packetCt = 0;
 int gp_sats;
-double t_temp, humidity;
+double humidity;
 int16_t pd1, pd2, pd3, pd4;
 long gp_lat, gp_lon, gp_alt;
 //static int32_t b_temp, b_humidity, b_press, b_gas;
@@ -40,7 +38,6 @@ int32_t b_temp = 99;
 int32_t b_humidity = 99;
 int32_t b_press = 99;
 int32_t b_gas = 99;
-
 
 
 
@@ -69,7 +66,9 @@ int gpsFound = 0;
 ADS1015 ADS(0x49, &Wire1);
 //Adafruit_ADS1015 ADS;
 
-//
+//Thermistor Things
+double R_T; //Calculation for Thermistor temperature value
+double t_temp; 
 
 
 //Timing Variables
@@ -320,8 +319,8 @@ void loop() {
     pd4 = ADS.readADC(3); //read photodiode 4
 
 
-    t_temp = analogRead(26);
-    //t_temp = (1.0/(log((200000.0/((1024.0/analogRead(26)) - 1))/200000)/3892.0 + 1.0/(25 + 273.15))) - 273.15; //Calculation for Thermistor temperature value
+    R_T = log((((10*1000) * pow(2,10)) / analogRead(26)) - (10*1000)); //Calculation for Thermistor temperature value
+    t_temp = 0.0085*pow(R_T, 4) - 0.4359*pow(R_T, 3) + 9.233*pow(R_T, 2) - 108.53*R_T + 520.59;
 
     if(threadFunc(1000, millis() , &lastPoll))//Run large-format packet every 1000ms
     {
