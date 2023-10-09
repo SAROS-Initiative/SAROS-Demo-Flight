@@ -1,6 +1,6 @@
 ///////////////////
 //SAROS_TestFlight_Main
-//Version: 2.4
+//Version: 2.5
 //Date: 10/08/2023
 //Author: Tristan McGinnis
 //Use: Main source code for SAROS test board
@@ -10,8 +10,8 @@
 #include "SAROS_Util.h"
 
 // Debug settings
-#define debug 1 //Running in DEBUG mode? Main LEDS will indicate during loop
-                //GPS will periodicall test for a lock every 30 seconds during main loop
+#define debug 0 //Running in DEBUG mode? Main LEDS will indicate during loop
+                //GPS will periodically test for a lock every 30 seconds during main loop
 #define skipGPSLock 0 //Skip waiting for GPS lock?
 
 //Constants
